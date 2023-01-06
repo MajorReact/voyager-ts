@@ -27,7 +27,7 @@ const registerUser = (req: Req, res: Res) => {
 
   if (!name || !email || !password) {
     res.status(400);
-    throw new Error("Please add all fields");
+    throw new Error("All fields required for registration");
   }
 
   // Check if user exists
@@ -53,7 +53,7 @@ const registerUser = (req: Req, res: Res) => {
     .then((user) => {
       if (user) {
         res.status(201).json({
-          _id: user.id,
+          _id: user._id,
           name: user.name,
           email: user.email,
           token: generateToken(user._id),
@@ -64,14 +64,10 @@ const registerUser = (req: Req, res: Res) => {
       }
     })
     .catch((error) => {
-      // Handle errors
       console.error(error);
       res.status(500).json({
         error: "Server error",
       });
-    })
-    .finally(() => {
-      // Disconnect from database, close connections, etc.
     });
 };
 
@@ -97,103 +93,10 @@ const loginUser = (req: Req, res: Res) => {
       }
     })
     .catch((error) => {
-      // Handle errors
       console.error(error);
       res.status(500).json({
         error: "Server error",
       });
-    })
-    .finally(() => {
-      // Disconnect from database, close connections, etc.
-    });
-};
-
-// @desc Register new user
-// @route POST /api/users
-// @access Public
-const registerUser = (req: Req, res: Res) => {
-  const { name, email, password } = req.body;
-
-  if (!name || !email || !password) {
-    res.status(400);
-    throw new Error("Please add all fields");
-  }
-
-  // Check if user exists
-  User.findOne({ email })
-    .then((userExists) => {
-      if (userExists) {
-        res.status(400);
-        throw new Error("User already exists");
-      }
-
-      // Hash password
-      return bcrypt.genSalt(10);
-    })
-    .then((salt) => bcrypt.hash(password, salt))
-    .then((hashedPassword) => {
-      // Create user
-      return User.create({
-        name,
-        email,
-        password: hashedPassword,
-      });
-    })
-    .then((user) => {
-      if (user) {
-        res.status(201).json({
-          _id: user.id,
-          name: user.name,
-          email: user.email,
-          token: generateToken(user._id),
-        });
-      } else {
-        res.status(400);
-        throw new Error("Invalid user data");
-      }
-    })
-    .catch((error) => {
-      // Handle errors
-      console.error(error);
-      res.status(500).json({
-        error: "Server error",
-      });
-    })
-    .finally(() => {
-      // Disconnect from database, close connections, etc.
-    });
-};
-
-// @desc Authenticate a user
-// @route POST /api/users/login
-// @access Public
-const loginUser = (req: Req, res: Res) => {
-  const { email, password } = req.body;
-
-  // Check for user email
-  User.findOne({ email })
-    .then((user) => {
-      if (user && bcrypt.compare(password, user.password)) {
-        res.json({
-          _id: user.id,
-          name: user.name,
-          email: user.email,
-          token: generateToken(user._id),
-        });
-      } else {
-        res.status(400);
-        throw new Error("Invalid credentials");
-      }
-    })
-    .catch((error) => {
-      // Handle errors
-      console.error(error);
-      res.status(500).json({
-        error: "Server error",
-      });
-    })
-    .finally(() => {
-      // Disconnect from database, close connections, etc.
     });
 };
 

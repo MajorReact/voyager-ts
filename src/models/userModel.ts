@@ -1,14 +1,15 @@
-import { Schema, model, SchemaTimestampsConfig } from "mongoose";
+import { Schema, model } from "mongoose";
 
-// 1. Create an interface representing a document in MongoDB.
+// Doc Interface
 interface IUser {
+  _id: string;
   name: string;
   email: string;
   password: string;
   timestamps?: boolean;
 }
 
-// 2. Create a Schema corresponding to the document interface.
+// Schema corresponding to the doc interface.
 const userSchema = new Schema<IUser>(
   {
     name: {
@@ -23,11 +24,15 @@ const userSchema = new Schema<IUser>(
       type: String,
       required: true,
     },
+    _id: {
+      type: String,
+      required: true,
+    },
   },
   { timestamps: true }
 );
 
-// 3. Create a Model.
+// Create a Model.
 const User = model<IUser>("User", userSchema);
 
 export { User };
