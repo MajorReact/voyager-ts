@@ -1,122 +1,156 @@
+// The controller uses a route which is protected by our middleware
+// Routes and middlewares are a part of the controller
+
 import bcrypt from "bcryptjs";
-import { Send } from "express";
-import jsonwebtoken from "jsonwebtoken";
-import { User } from "../models/userModel";
+import jwt from "jsonwebtoken";
+import User from "../models/userModel";
 
-type Req = {
-  user(user: any): typeof User;
-  body: {
-    name: string;
-    email: string;
-    password: string;
-  };
-};
+interface RegisterUserDTO {
+  name: string;
+  email: string;
+  password: string;
+}
 
-type Res = {
-  status: (status: number) => Res;
-  json: (body: object) => Res;
-  throw: (error: Error) => Error;
-  send: (send: String) => Send;
-};
+interface LoginUserDTO {
+  email: string;
+  password: string;
+}
 
-// @desc Register new user
-// @route POST /api/users
-// @access Public
-const registerUser = (req: Req, res: Res) => {
-  const { name, email, password } = req.body;
+interface Response {
+  status: (statusCode: number) => Response;
+  json: (data: any) => void;
+}
 
-  if (!name || !email || !password) {
-    res.status(400);
-    throw new Error("All fields required for registration");
-  }
+interface Request {
+  body: any;
+  params: any;
+}
 
-  // Check if user exists
-  User.findOne({ email })
-    .then((userExists) => {
-      if (userExists) {
-        res.status(400);
-        throw new Error("User already exists");
+export class UserController {
+  static async registerUser(req: Request, res: Response) {
+    try {
+      const { name, email, password }: RegisterUserDTO = req.body;
+
+      // Check for existing user
+      const user = await User.findOne({ email });
+      if (user) {
+        return res.status(400).json({
+          success: false,
+          error: "User already exists",
+        });
       }
 
-      // Hash password
-      return bcrypt.genSalt(10);
-    })
-    .then((salt) => bcrypt.hash(password, salt))
-    .then((hashedPassword) => {
-      // Create user
-      return User.create({
+      // Create new user
+      const newUser = new User({
         name,
         email,
-        password: hashedPassword,
+        password,
       });
-    })
-    .then((user) => {
-      if (user) {
-        res.status(201).json({
-          _id: user._id,
-          name: user.name,
-          email: user.email,
-          token: generateToken(user._id),
-        });
-      } else {
-        res.status(400);
-        throw new Error("Invalid user data");
-      }
-    })
-    .catch((error) => {
-      console.error(error);
+
+      // Hash the password
+      const salt = await bcrypt.genSalt(10);
+      newUser.password = await bcrypt.hash(password, salt);
+
+      // Save the user to the database
+      await newUser.save();
+
+      // Create a jsonwebtoken
+      const payload = {
+        user: {
+          id: newUser._id,
+        },
+      };
+
+      jwt.sign(
+        payload,
+        process.env.JWT_SECRET,
+        { expiresIn: 3600 },
+        (err: any, token: any) => {
+          if (err) throw err;
+          res.status(201).json({
+            success: true,
+            token,
+          });
+        }
+      );
+    } catch (err) {
+      console.error(err);
       res.status(500).json({
-        error: "Server error",
+        success: false,
+        error: "Server Error",
       });
-    });
-};
-
-// @desc Authenticate a user
-// @route POST /api/users/login
-// @access Public
-const loginUser = (req: Req, res: Res) => {
-  const { email, password } = req.body;
-
-  // Check for user email
-  User.findOne({ email })
-    .then((user) => {
-      if (user && bcrypt.compare(password, user.password)) {
-        res.json({
-          _id: user.id,
-          name: user.name,
-          email: user.email,
-          token: generateToken(user._id),
-        });
-      } else {
-        res.status(400);
-        throw new Error("Invalid credentials");
-      }
-    })
-    .catch((error) => {
-      console.error(error);
-      res.status(500).json({
-        error: "Server error",
-      });
-    });
-};
-
-// @desc    Get user data
-// @route   GET /api/users/me
-// @access  Private
-const getMe = async (req: Req, res: Res) => {
-  try {
-    res.status(200).json(req.user);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("An error occurred");
+    }
   }
-};
 
-// Generate JWT
-const generateToken = (id: string) => {
-  return jsonwebtoken.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: "30d",
-  });
-};
+  static async loginUser(req: Request, res: Response) {
+    try {
+      const { email, password }: LoginUserDTO = req.body;
 
-export { registerUser, loginUser, getMe };
+      // Check for existing user
+      const user = await User.findOne({ email });
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid credentials",
+        });
+      }
+
+      // Compare the password
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid credentials",
+        });
+      }
+
+      // Create a jsonwebtoken
+      const payload = {
+        user: {
+          id: user._id,
+        },
+      };
+
+      jwt.sign(
+        payload,
+        process.env.JWT_SECRET,
+        { expiresIn: 3600 },
+        (err: any, token: any) => {
+          if (err) throw err;
+          res.status(200).json({
+            success: true,
+            token,
+          });
+        }
+      );
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({
+        success: false,
+        error: "Server Error",
+      });
+    }
+  }
+
+  static async getUser(req: Request, res: Response) {
+    try {
+      const user = await User.findById(req.params.id).select("-password");
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: "User not found",
+        });
+      }
+      res.status(200).json({
+        success: true,
+        data: user,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({
+        success: false,
+        error: "Server Error",
+      });
+    }
+  }
+}

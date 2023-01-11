@@ -1,142 +1,164 @@
-const Post = require("../models/postModel");
-const User = require("../models/userModel");
-import { Request, Response } from "express";
+// The controller uses a route which is protected by our middleware
+// Routes and middlewares are a part of the controller
+import Post from "../models/postModel";
+import User from "../models/userModel";
 
-interface getPostRequest extends Request {
-  user: getPostRequest;
-  id: String;
+interface CreatePostDTO {
+  userId: string;
+  text: string;
 }
 
-interface setPostRequest extends Request {
-  user: setPostRequest;
-  id: String;
-  body: {
-    text: string;
-  };
+interface UpdatePostDTO {
+  text?: string;
 }
 
-interface UpdatePostRequest extends Request {
+interface Response {
+  status: (statusCode: number) => Response;
+  json: (data: any) => void;
+}
+
+interface Request {
+  body: any;
+  params: any;
   user: any;
 }
 
-interface deletePostRequest extends Request {
-  user: any;
-}
+class PostController {
+  static async createPost(req: Request, res: Response) {
+    try {
+      const user = await User.findById(req.body.userId);
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: "User not found",
+        });
+      }
 
-// @desc    Get posts
-// @route   GET /api/posts
-// @access  Private
-const getPosts = (req: getPostRequest, res: Response) => {
-  const userId = req.user?.id;
-  // fron above line, do not access user property of req if not available
-  Post.find({ user: userId })
-    .then((posts: String) => res.status(200).json(posts))
-    .catch((error: Error) => {
-      console.error(error);
-      res.status(500).json({
-        error: "Server error",
+      const postData: CreatePostDTO = {
+        userId: user._id,
+        text: req.body.text,
+      };
+
+      const post = await Post.create(postData);
+      res.status(201).json({
+        success: true,
+        data: post,
       });
-    });
-};
-
-// @desc    Set post
-// @route   POST /api/posts
-// @access  Private
-const setPost = (req: setPostRequest, res: Response) => {
-  try {
-    const text = req.body?.text;
-    if (!text) {
-      res.status(400);
-      throw new Error("Please include a Post in the text field!!!");
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: "Server Error",
+      });
     }
-
-    Post.create({
-      text,
-      user: req.user?.id,
-    }).then((post: String) => {
-      res.status(200).json(post);
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({
-      error: "Server error",
-    });
   }
-};
 
-// @desc    Update post
-// @route   PUT /api/posts/:id
-// @access  Private
-const updatePost = (req: UpdatePostRequest, res: Response) => {
-  Post.findById(req?.params?.id)
-    .then((post) => {
-      if (!post) {
-        res?.status(400);
-        throw new Error("Post not found");
-      }
-
-      // Check for user?
-      if (!req?.user) {
-        res?.status(401);
-        throw new Error("User not found");
-      }
-
-      // Make sure the logged in user? matches the post user?
-      if (post.user?.toString() !== req?.user?.id) {
-        res?.status(401);
-        throw new Error("User not authorized");
-      }
-
-      return Post.findByIdAndUpdate(req?.params?.id, req?.body, {
-        new: true,
+  static async getPosts(req: Request, res: Response) {
+    try {
+      const posts = await Post.find({}).populate("user", "-password");
+      res.status(200).json({
+        success: true,
+        data: posts,
       });
-    })
-    .then((updatedPost) => {
-      res?.status(200).json(updatedPost);
-    })
-    .catch((error) => {
-      console.error(error);
+    } catch (err) {
       res.status(500).json({
-        error: "Server error",
+        success: false,
+        error: "Server Error",
       });
-    });
-};
+    }
+  }
 
-// @desc    Delete post
-// @route   DELETE /api/posts/:id
-// @access  Private
-const deletePost = (req: deletePostRequest, res: Response) => {
-  Post.findById(req.params.id)
-    .then((post) => {
+  static async getPost(req: Request, res: Response) {
+    try {
+      // When we populate a field, it returns the entire document.
+      // We want to exempt the password.
+      const post = await Post.findById(req.params.id).populate(
+        "user",
+        "-password"
+      );
       if (!post) {
-        res.status(400);
-        throw new Error("Post not found");
+        return res.status(404).json({
+          success: false,
+          error: "Post not found",
+        });
       }
-
-      if (!req.user) {
-        res.status(401);
-        throw new Error("User not found");
-      }
-
-      if (post.user.toString() !== req.user.id) {
-        res.status(401);
-        throw new Error("User not authorized");
-      }
-
-      return post.remove();
-    })
-    .then(() => res.status(200).json({ id: req.params.id }))
-    .catch((error) => {
-      console.error(error);
-      res.status(500).json({
-        error: "Server error",
+      res.status(200).json({
+        success: true,
+        data: post,
       });
-    });
-};
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: "Server Error",
+      });
+    }
+  }
 
-module.exports = {
-  getPosts,
-  setPost,
-  updatePost,
-  deletePost,
-};
+  static async updatePost(req: Request, res: Response) {
+    try {
+      const post = await Post.findById(req.params.id);
+      if (!post) {
+        return res.status(404).json({
+          success: false,
+          error: "Post not found",
+        });
+      }
+
+      if (req.user._id.toString() !== post.user.toString()) {
+        return res.status(401).json({
+          success: false,
+          error: "User not authorized",
+        });
+      }
+
+      const postData: UpdatePostDTO = {
+        text: req.body.text,
+      };
+
+      post.set(postData);
+      await post.save();
+
+      res.status(200).json({
+        success: true,
+        data: post,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: "Server Error",
+      });
+    }
+  }
+
+  static async deletePost(req: Request, res: Response) {
+    try {
+      const post = await Post.findById(req.params.id);
+      if (!post) {
+        return res.status(404).json({
+          success: false,
+          error: "Post not found",
+        });
+      }
+
+      if (req.user._id.toString() !== post.user.toString()) {
+        return res.status(401).json({
+          success: false,
+          error: "User not authorized",
+        });
+      }
+
+      await post.remove();
+
+      res.status(200).json({
+        success: true,
+        data: {},
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: "Server Error",
+      });
+    }
+  }
+}
+
+export default PostController;

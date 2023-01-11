@@ -1,38 +1,26 @@
-import { Schema, model } from "mongoose";
+import mongoose from "mongoose";
 
-// Doc Interface
-interface IUser {
-  _id: string;
-  name: string;
-  email: string;
-  password: string;
-  timestamps?: boolean;
-}
-
-// Schema corresponding to the doc interface.
-const userSchema = new Schema<IUser>(
+const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: true,
+      required: [true, "Please add a name"],
     },
     email: {
       type: String,
-      required: true,
+      required: [true, "Please add an email"],
+      unique: true,
     },
     password: {
       type: String,
-      required: true,
-    },
-    _id: {
-      type: String,
-      required: true,
+      required: [true, "Please add a password"],
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-// Create a Model.
-const User = model<IUser>("User", userSchema);
+const User = mongoose.model("User", userSchema);
 
-export { User };
+export default User;
